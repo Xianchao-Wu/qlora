@@ -652,7 +652,7 @@ def train():
     model.config.use_cache = False
     print_trainable_parameters(args, model)
     print('loaded model')
-    set_seed(args.seed) # 0 -> 42? 
+    set_seed(args.seed) # 0 -> 42, 可以通过命令行设置 
 
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
