@@ -1,4 +1,4 @@
-python qlora.py \
+python -m ipdb qlora.py \
     --model_name_or_path huggyllama/llama-7b \
     --output_dir ./output/guanaco-7b \
     --logging_steps 10 \
@@ -11,7 +11,7 @@ python qlora.py \
     --max_eval_samples 1000 \
     --per_device_eval_batch_size 1 \
     --max_new_tokens 32 \
-    --dataloader_num_workers 3 \
+    --dataloader_num_workers 0 \
     --group_by_length \
     --logging_strategy steps \
     --remove_unused_columns False \
@@ -32,7 +32,7 @@ python qlora.py \
     --source_max_len 16 \
     --target_max_len 512 \
     --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 16 \
+    --gradient_accumulation_steps 4 \
     --max_steps 1875 \
     --eval_steps 187 \
     --learning_rate 0.0002 \
@@ -40,4 +40,4 @@ python qlora.py \
     --max_grad_norm 0.3 \
     --lora_dropout 0.1 \
     --weight_decay 0.0 \
-    --seed 0
+    --seed 42 #0
