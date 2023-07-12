@@ -1,6 +1,6 @@
 python qlazylora.py \
-    --model_name_or_path huggyllama/llama-13b \
-    --output_dir ./output/huarizo-13b \
+    --model_name_or_path huggyllama/llama-30b \
+    --output_dir ./output/huarizo-33b \
 	--cache_dir "/workspace/asr/peft/qlora" \
     --logging_steps 10 \
     --save_strategy steps \
@@ -41,7 +41,7 @@ python qlazylora.py \
     --gradient_accumulation_steps 16 \
     --max_steps 1875 \
     --eval_steps 187 \
-    --learning_rate 0.0002 \
+    --learning_rate 0.0001 \
     --adam_beta2 0.999 \
     --max_grad_norm 0.3 \
     --lazy_lora_dropout 0.05 \
