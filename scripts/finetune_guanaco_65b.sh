@@ -1,17 +1,18 @@
 python qlora.py \
     --model_name_or_path huggyllama/llama-65b \
     --output_dir ./output/guanaco-65b \
+	--cache_dir "/workspace/asr/peft/qlora" \
     --logging_steps 10 \
     --save_strategy steps \
     --data_seed 42 \
-    --save_steps 200 \
+    --save_steps 50 \
     --save_total_limit 40 \
     --evaluation_strategy steps \
     --eval_dataset_size 1024 \
     --max_eval_samples 1000 \
     --per_device_eval_batch_size 1 \
     --max_new_tokens 32 \
-    --dataloader_num_workers 3 \
+    --dataloader_num_workers 4 \
     --group_by_length \
     --logging_strategy steps \
     --remove_unused_columns False \
@@ -40,4 +41,4 @@ python qlora.py \
     --max_grad_norm 0.3 \
     --lora_dropout 0.05 \
     --weight_decay 0.0 \
-    --seed 0
+    --seed 42

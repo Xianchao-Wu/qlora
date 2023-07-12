@@ -21,3 +21,4 @@ python qlora.py \
     --max_eval_samples 1000 \
     --eval_steps 1000 \
     --optim paged_adamw_32bit \
+	--cache_dir "/workspace/asr/peft/qlora"

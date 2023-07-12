@@ -1,6 +1,21 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import sys
+sys.path.insert(1, '/workspace/asr/peft/src')
+from peft import (
+    prepare_model_for_kbit_training,
+    LazyLoraConfig,
+    get_peft_model,
+    PeftModel,
+    TaskType,
+    PeftType,
+    PrefixTuningConfig,
+    PromptTuningConfig,
+    PromptTuningInit,
+)
+#import ipdb; ipdb.set_trace()
+
 from collections import defaultdict
 import copy
 import json
@@ -31,13 +46,12 @@ from transformers import (
 from datasets import load_dataset, Dataset
 import evaluate
 
-from peft import (
-    prepare_model_for_kbit_training,
-    LoraConfig,
-    get_peft_model,
-    PeftModel
-)
-from peft.tuners.lora import LoraLayer
+# NOTE use local code
+#sys.path.append('/workspace/asr/peft/src')
+#sys.path.insert(1, '/workspace/asr/peft/src')
+#import ipdb; ipdb.set_trace()
+
+from peft.tuners.lazy_lora import LazyLoraLayer
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 
 
@@ -47,6 +61,8 @@ logger = logging.getLogger(__name__)
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
+
+#cache_dir = os.getcwd()
 
 @dataclass
 class ModelArguments:
@@ -101,7 +117,7 @@ class DataArguments:
 @dataclass
 class TrainingArguments(transformers.Seq2SeqTrainingArguments):
     cache_dir: Optional[str] = field(
-        default=None
+        default=os.getcwd() #, None
     )
     train_on_source: Optional[bool] = field(
         default=False,
@@ -147,17 +163,41 @@ class TrainingArguments(transformers.Seq2SeqTrainingArguments):
         default=4,
         metadata={"help": "How many bits to use."}
     )
+    num_virtual_tokens_prompt: int = field(
+        default=8,
+        metadata={"help": "Number of virtual tokens used in the prompt tuning in Lazy Lora."}
+    )
+    num_virtual_tokens_prefix: int = field(
+        default=30,
+        metadata={"help": "Number of virtual tokens used in the prefix tuning in Lazy Lora."}
+    )
     lora_r: int = field(
         default=64,
         metadata={"help": "Lora R dimension."}
     )
-    lora_alpha: float = field(
-        default=16,
-        metadata={"help": " Lora alpha."}
+    is_r_by_svd: bool = field(
+        default=True,
+        metadata={"help": "On-the-fly dynamically determine the rank of a lazy LoRA layer by the singular value of the weight matrix."}
     )
-    lora_dropout: float = field(
+    lazy_lora_alpha: float = field(
+        default=16,
+        metadata={"help": "Lazy Lora alpha."}
+    )
+    lazy_pre_lora_alpha: float = field(
+        default=0.1,
+        metadata={"help": "Lazy Lora Pre LLaMA adapter's alpha."}
+    )
+    lazy_pre_adapter_type: str = field(
+        default='linear',
+        metadata={"help": "The network type of the Pre LLaMA adapter type, 'linear', 'conv1d', or 'none'."}
+    )
+    lora_modules: str = field(
+        default='all',
+        metadata={"help": "The name of networks to be appended with lazy lora layers, e.g., 'q_proj,k_proj' and 'all' for automatically use all linear layers."}
+    )
+    lazy_lora_dropout: float = field(
         default=0.0,
-        metadata={"help":"Lora dropout."}
+        metadata={"help":"Lazy Lora dropout."}
     )
     max_memory_MB: int = field(
         default=80000,
@@ -176,7 +216,7 @@ class TrainingArguments(transformers.Seq2SeqTrainingArguments):
     learning_rate: float = field(default=0.0002, metadata={"help": 'The learnign rate'})
     remove_unused_columns: bool = field(default=False, metadata={"help": 'Removed unused columns. Needed to make this codebase work.'})
     max_grad_norm: float = field(default=0.3, metadata={"help": 'Gradient clipping max norm. This is tuned and works well for all models tested.'})
-    gradient_checkpointing: bool = field(default=True, metadata={"help": 'Use gradient checkpointing. You want to use this.'})
+    gradient_checkpointing: bool = field(default=False, metadata={"help": 'Use gradient checkpointing. You want to use this. However, set this to False, if you use LazyLora with prompt tuning where we need past_key_values!'})
     do_train: bool = field(default=True, metadata={"help": 'To train or not to train, that is the question?'})
     lr_scheduler_type: str = field(default='constant', metadata={"help": 'Learning rate schedule. Constant a bit better than cosine, and has advantage for analysis'})
     warmup_ratio: float = field(default=0.03, metadata={"help": 'Fraction of steps to do a warmup for'})
@@ -223,17 +263,18 @@ def find_all_linear_names(args, model):
     lora_module_names = set()
     for name, module in model.named_modules():
         if isinstance(module, cls):
-            names = name.split('.')
+            names = name.split('.') # e.g., 'model.layers.0.self_attn.q_proj', Linear4bit(in_features=4096, out_features=4096, bias=False)
             lora_module_names.add(names[0] if len(names) == 1 else names[-1])
 
 
     if 'lm_head' in lora_module_names: # needed for 16-bit
         lora_module_names.remove('lm_head')
-    return list(lora_module_names)
+    return list(lora_module_names) # {'k_proj', 'down_proj', 'up_proj', 'v_proj', 'gate_proj', 'o_proj', 'q_proj'}
 
 
 class SavePeftModelCallback(transformers.TrainerCallback):
     def save_model(self, args, state, kwargs):
+        #import ipdb; ipdb.set_trace()
         print('Saving PEFT checkpoint...')
         if state.best_model_checkpoint is not None:
             checkpoint_folder = os.path.join(state.best_model_checkpoint, "adapter_model")
@@ -260,15 +301,14 @@ class SavePeftModelCallback(transformers.TrainerCallback):
         self.save_model(args, state, kwargs)
 
 def get_accelerate_model(args, checkpoint_dir):
-
+    #import ipdb; ipdb.set_trace()
     n_gpus = torch.cuda.device_count()
     max_memory = f'{args.max_memory_MB}MB'
     max_memory = {i: max_memory for i in range(n_gpus)}
-    device_map = "auto"
+    device_map = 'auto' #{"": 0} # "auto" TODO
 
     # if we are in a distributed setting, we need to set the device map and max memory per device
     if os.environ.get('LOCAL_RANK') is not None:
-        #import ipdb; ipdb.set_trace()
         local_rank = int(os.environ.get('LOCAL_RANK', '0'))
         device_map = {'': local_rank}
         max_memory = {'': max_memory[local_rank]}
@@ -296,7 +336,7 @@ def get_accelerate_model(args, checkpoint_dir):
         ),
         torch_dtype=(torch.float32 if args.fp16 else (torch.bfloat16 if args.bf16 else torch.float32)),
         trust_remote_code=args.trust_remote_code,
-        use_auth_token=args.use_auth_token
+        use_auth_token=args.use_auth_token,
     )
     if compute_dtype == torch.float16 and args.bits == 4:
         major, minor = torch.cuda.get_device_capability()
@@ -305,11 +345,8 @@ def get_accelerate_model(args, checkpoint_dir):
             print('Your GPU supports bfloat16, you can accelerate training with the argument --bf16')
             print('='*80)
 
-    setattr(model, 'is_parallelizable', True)
-    setattr(model, 'model_parallel', True)
-    #setattr(model, 'is_parallelizable', True)
-    model.is_parallelizable = True
-    model.model_parallel = True
+    setattr(model, 'model_parallel', True) # TODO
+    setattr(model, 'is_parallelizable', True) # TODO
 
     model.config.torch_dtype=(torch.float32 if args.fp16 else (torch.bfloat16 if args.bf16 else torch.float32))
 
@@ -323,29 +360,50 @@ def get_accelerate_model(args, checkpoint_dir):
             print("Loading adapters from checkpoint.")
             model = PeftModel.from_pretrained(model, join(checkpoint_dir, 'adapter_model'), is_trainable=True)
         else:
-            print(f'adding LoRA modules...')
-            modules = find_all_linear_names(args, model)
-            config = LoraConfig(
+            print(f'adding Lazy LoRA modules...')
+            if args.lora_modules is None or args.lora_modules == 'all':
+                modules = find_all_linear_names(args, model) # ['o_proj', 'q_proj', 'k_proj', 'v_proj', 'up_proj', 'gate_proj', 'down_proj']
+            else:
+                modules = args.lora_modules.split(',')
+            print(f'lazy lora for modules={modules}')
+            peft_config_prompt_tuning = PromptTuningConfig(
+                task_type=TaskType.CAUSAL_LM,
+                prompt_tuning_init=PromptTuningInit.TEXT,
+                num_virtual_tokens=args.num_virtual_tokens_prompt,
+                prompt_tuning_init_text="please think step-by-step to give the best and most reasonable answer",
+                tokenizer_name_or_path=args.model_name_or_path,
+            ) if args.num_virtual_tokens_prompt > 0 else None
+
+            peft_config_prefix_tuning = PrefixTuningConfig(
+                task_type=TaskType.CAUSAL_LM,
+                num_virtual_tokens=args.num_virtual_tokens_prefix,
+            ) if args.num_virtual_tokens_prefix > 0 else None
+
+            config = LazyLoraConfig(
                 r=args.lora_r,
-                lora_alpha=args.lora_alpha,
+                is_r_by_svd=args.is_r_by_svd,
+                lazy_lora_alpha=args.lazy_lora_alpha,
+                lazy_pre_lora_alpha=args.lazy_pre_lora_alpha,
+                lazy_pre_adapter_type=args.lazy_pre_adapter_type,
                 target_modules=modules,
-                lora_dropout=args.lora_dropout,
+                lazy_lora_dropout=args.lazy_lora_dropout,
                 bias="none",
-                task_type="CAUSAL_LM",
+                task_type=TaskType.CAUSAL_LM,
+                prompt_tuning_config=peft_config_prompt_tuning,
+                prefix_tuning_config=peft_config_prefix_tuning,
             )
             model = get_peft_model(model, config)
 
-    for name, module in model.named_modules():
-        if isinstance(module, LoraLayer):
+    for name, module in model.named_modules(): # NOTE 分别为各个module设定运算精度，高！
+        if isinstance(module, LazyLoraLayer):
             if args.bf16:
                 module = module.to(torch.bfloat16)
         if 'norm' in name:
-            module = module.to(torch.float32)
+            module = module.to(torch.float32) # e.g., 'base_model.model.model.layers.0.input_layernorm' -> float32
         if 'lm_head' in name or 'embed_tokens' in name:
             if hasattr(module, 'weight'):
                 if args.bf16 and module.weight.dtype == torch.float32:
                     module = module.to(torch.bfloat16)
-    #import ipdb; ipdb.set_trace()
     return model
 
 def print_trainable_parameters(args, model):
@@ -358,11 +416,11 @@ def print_trainable_parameters(args, model):
         all_param += param.numel()
         if param.requires_grad:
             trainable_params += param.numel()
-    if args.bits == 4: trainable_params /= 2
+    if args.bits == 4: trainable_params /= 2 # NOTE 这个直接/2，有意思
     print(
         f"trainable params: {trainable_params} || "
         f"all params: {all_param} || "
-        f"trainable: {100 * trainable_params / all_param}"
+        f"trainable: {100 * trainable_params / all_param}%"
     )
 
 def smart_tokenizer_and_embedding_resize(
@@ -374,17 +432,18 @@ def smart_tokenizer_and_embedding_resize(
 
     Note: This is the unoptimized version that may make your embedding size not be divisible by 64.
     """
-    num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict)
-    model.resize_token_embeddings(len(tokenizer))
+    num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict) # {'pad_token': '[PAD]'}
+    model.resize_token_embeddings(len(tokenizer)) # NOTE 重要，可以增加token到已有的tokenizer! 32000 -> 32001; model.base_model.model.model.embed_tokens: Embedding(32001, 4096)
 
     if num_new_tokens > 0:
-        input_embeddings = model.get_input_embeddings().weight.data
-        output_embeddings = model.get_output_embeddings().weight.data
+        #import ipdb; ipdb.set_trace()
+        input_embeddings = model.get_input_embeddings().weight.data # /usr/local/lib/python3.8/dist-packages/transformers/models/llama/modeling_llama.py:622, self.model.embed_tokens, Embedding(32001, 4096)
+        output_embeddings = model.get_output_embeddings().weight.data # /usr/local/lib/python3.8/dist-packages/transformers/models/llama/modeling_llama.py, self.lm_head, Linear(in_features=4096, out_features=32001, bias=False) NOTE
 
-        input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
-        output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True)
+        input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True) # [1, 4096]
+        output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(dim=0, keepdim=True) # [1, 4096]
 
-        input_embeddings[-num_new_tokens:] = input_embeddings_avg
+        input_embeddings[-num_new_tokens:] = input_embeddings_avg # 前面的已有的token的embedding的均值
         output_embeddings[-num_new_tokens:] = output_embeddings_avg
 
 @dataclass
@@ -397,6 +456,7 @@ class DataCollatorForCausalLM(object):
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
         # Extract elements
+        #import ipdb; ipdb.set_trace()
         sources = [f"{self.tokenizer.bos_token}{example['input']}" for example in instances]
         targets = [f"{example['output']}{self.tokenizer.eos_token}" for example in instances]
         # Tokenize
@@ -405,11 +465,11 @@ class DataCollatorForCausalLM(object):
             max_length=self.source_max_len,
             truncation=True,
             add_special_tokens=False,
-        )
+        ) # {'input_ids': [[1], [1], [1], [1], [1], [1], [1], [1]], 'attention_mask': [[1], [1], [1], [1], [1], [1], [1], [1]]}
         tokenized_targets = self.tokenizer(
             targets,
-            max_length=self.target_max_len,
-            truncation=True,
+            max_length=self.target_max_len, # 512 TODO
+            truncation=True, # 对于过长的target，会根据max_length进行截断! NOTE
             add_special_tokens=False,
         )
         # Build the input and labels for causal LM
@@ -430,14 +490,14 @@ class DataCollatorForCausalLM(object):
             else:
                 input_ids.append(torch.tensor(tokenized_source))
         # Apply padding
-        input_ids = pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-        labels = pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX) if not self.predict_with_generate else None
+        input_ids = pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id) # [8, 513]
+        labels = pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX) if not self.predict_with_generate else None # [8, 513]
         data_dict = {
             'input_ids': input_ids,
-            'attention_mask':input_ids.ne(self.tokenizer.pad_token_id),
+            'attention_mask':input_ids.ne(self.tokenizer.pad_token_id), # self.tokenizer.pad_token_id=32000; [8, 513], all True
         }
         if labels is not None:
-            data_dict['labels'] = labels
+            data_dict['labels'] = labels # [8, 513], first element=-100=source; later 512 for target
         return data_dict
 
 def extract_unnatural_instructions_data(examples, extract_reformulations=False):
@@ -530,7 +590,7 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
         elif dataset_name == 'longform':
             return load_dataset("akoksal/LongForm")
         elif dataset_name == 'oasst1':
-            return load_dataset("timdettmers/openassistant-guanaco")
+            return load_dataset("timdettmers/openassistant-guanaco") # cache_dir=args.cache_dir
         elif dataset_name == 'vicuna':
             raise NotImplementedError("Vicuna data was not released.")
         else:
@@ -578,7 +638,7 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
         return dataset
 
      # Load dataset.
-    dataset = load_data(args.dataset)
+    dataset = load_data(args.dataset) # 'oasst1'
     dataset = format_dataset(dataset, args.dataset_format)
 
     # Split train/eval, reduce size
@@ -589,10 +649,10 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
             print('Splitting train dataset in train and validation according to `eval_dataset_size`')
             dataset = dataset["train"].train_test_split(
                 test_size=args.eval_dataset_size, shuffle=True, seed=42
-            )
+            ) # e.g., 9846 -> 8822 + 1024
             eval_dataset = dataset['test']
         if args.max_eval_samples is not None and len(eval_dataset) > args.max_eval_samples:
-            eval_dataset = eval_dataset.select(range(args.max_eval_samples))
+            eval_dataset = eval_dataset.select(range(args.max_eval_samples)) # 1024 -> 1000
         if args.group_by_length:
             eval_dataset = eval_dataset.map(lambda x: {'length': len(x['input']) + len(x['output'])})
     if args.do_train:
@@ -631,6 +691,7 @@ def get_last_checkpoint(checkpoint_dir):
     return None, False # first training
 
 def train():
+    #import ipdb; ipdb.set_trace()
     hfparser = transformers.HfArgumentParser((
         ModelArguments, DataArguments, TrainingArguments, GenerationArguments
     ))
@@ -650,7 +711,7 @@ def train():
     model.config.use_cache = False
     print_trainable_parameters(args, model)
     print('loaded model')
-    set_seed(args.seed)
+    set_seed(args.seed) # 0 -> 42, 可以通过命令行设置 
 
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
@@ -679,21 +740,19 @@ def train():
                 "unk_token": tokenizer.convert_ids_to_tokens(
                     model.config.pad_token_id if model.config.pad_token_id != -1 else tokenizer.pad_token_id
                 ),
-        })
+        }) # len(tokenizer) = 32001, not changed after adding
     data_module = make_data_module(tokenizer=tokenizer, args=args)
-    #import ipdb; ipdb.set_trace()
     trainer = Seq2SeqTrainer(
         model=model,
         tokenizer=tokenizer,
         args=training_args,
         **{k:v for k,v in data_module.items() if k != 'predict_dataset'},
     )
-    #import ipdb; ipdb.set_trace()
 
     # Callbacks
     if not args.full_finetune:
-        trainer.add_callback(SavePeftModelCallback)
-    if args.do_mmlu_eval:
+        trainer.add_callback(SavePeftModelCallback) # NOTE
+    if args.do_mmlu_eval: # in!
         if args.mmlu_dataset == 'mmlu-zs':
             mmlu_dataset = load_dataset("json", data_files={
                 'eval': 'data/mmlu/zero_shot_mmlu_val.json',
@@ -707,7 +766,7 @@ def train():
                 'test': 'data/mmlu/five_shot_mmlu_test.json',
             })
             # mmlu_dataset = mmlu_dataset.remove_columns('subject')
-        mmlu_dataset = mmlu_dataset[args.mmlu_split]
+        mmlu_dataset = mmlu_dataset[args.mmlu_split] # 'eval' in {'eval', 'test'}
         if args.max_mmlu_samples is not None:
             mmlu_dataset = mmlu_dataset.select(range(args.max_mmlu_samples))
         abcd_idx = [
@@ -715,19 +774,20 @@ def train():
             tokenizer("B", add_special_tokens=False).input_ids[0],
             tokenizer("C", add_special_tokens=False).input_ids[0],
             tokenizer("D", add_special_tokens=False).input_ids[0],
-        ]
+        ] # [319, 350, 315, 360]
         accuracy = evaluate.load("accuracy")
         class MMLUEvalCallback(transformers.TrainerCallback):
-            def on_evaluate(self, args, state, control, model, **kwargs):
+            def on_evaluate(self, args, state, control, model, **kwargs): # TODO
+                #import ipdb; ipdb.set_trace()
                 data_loader = trainer.get_eval_dataloader(mmlu_dataset)
-                source_max_len = trainer.data_collator.source_max_len
-                trainer.data_collator.source_max_len = args.mmlu_source_max_len
+                source_max_len = trainer.data_collator.source_max_len # 16
+                trainer.data_collator.source_max_len = args.mmlu_source_max_len # 2048
                 trainer.model.eval()
                 preds, refs = [], []
                 loss_mmlu = 0
                 for batch in tqdm(data_loader, total=len(data_loader)):
-                    (loss, logits, labels) = trainer.prediction_step(trainer.model,batch,prediction_loss_only=False,)
-                    # There are two tokens, the output, and eos token.
+                    (loss, logits, labels) = trainer.prediction_step(trainer.model,batch,prediction_loss_only=False,) # loss=tensor(2.3438, device='cuda:0', dtype=torch.bfloat16); logits.shape=[8, 412, 32001]; labels.shape=[8, 412]
+                    # There are two tokens, the output, and eos token. e.g., ...-100, 319, 2, -100, ...
                     for i, logit in enumerate(logits):
                         label_non_zero_id = (batch['labels'][i] != -100).nonzero()[0][0]
                         logit_abcd = logit[label_non_zero_id-1][abcd_idx]
@@ -754,7 +814,7 @@ def train():
                 trainer.log(results)
                 trainer.data_collator.source_max_len = source_max_len
 
-        trainer.add_callback(MMLUEvalCallback)
+        trainer.add_callback(MMLUEvalCallback) # NOTE
 
     # Verifying the datatypes.
     dtypes = {}
@@ -762,10 +822,10 @@ def train():
         dtype = p.dtype
         if dtype not in dtypes: dtypes[dtype] = 0
         dtypes[dtype] += p.numel()
-    total = 0
+    total = 0 # dtypes -> {torch.bfloat16: 422060032, torch.uint8: 3238002688, torch.float32: 266240}
     for k, v in dtypes.items(): total+= v
     for k, v in dtypes.items():
-        print(k, v, v/total)
+        print(k, v, round(v/total * 100.0, 2), '%')
 
     all_metrics = {"run_name": args.run_name}
     # Training
@@ -773,7 +833,7 @@ def train():
         logger.info("*** Train ***")
         # Note: `resume_from_checkpoint` not supported for adapter checkpoints by HF.
         # Currently adapter checkpoint is reloaded as expected but optimizer/scheduler states are not.
-        train_result = trainer.train()
+        train_result = trainer.train() # NOTE
         metrics = train_result.metrics
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
@@ -811,4 +871,5 @@ def train():
             fout.write(json.dumps(all_metrics))
 
 if __name__ == "__main__":
+    #import ipdb; ipdb.set_trace()
     train()
