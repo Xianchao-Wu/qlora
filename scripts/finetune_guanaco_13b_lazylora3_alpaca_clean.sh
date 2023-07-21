@@ -1,21 +1,21 @@
 is_r_by_svd=True
-num_tok_prompt=0
+num_tok_prompt=32
 num_tok_prefix=0
 pre_adapter="none"
 lora_r=32
-out_dir="./output/huarizo-33b-12-longform"
+out_dir="./output/huarizo-13b-3-alpaca-clean"
 
-dataset="longform"
+dataset="alpaca-clean"
 
 python qlazylora.py \
-    --model_name_or_path huggyllama/llama-30b \
+    --model_name_or_path huggyllama/llama-13b \
     --output_dir ${out_dir} \
 	--cache_dir "/workspace/asr/peft/qlora" \
     --logging_steps 10 \
     --save_strategy steps \
     --data_seed 42 \
     --save_steps 100 \
-    --save_total_limit 60 \
+    --save_total_limit 40 \
     --evaluation_strategy steps \
     --eval_dataset_size 1024 \
     --max_eval_samples 1000 \
@@ -44,13 +44,13 @@ python qlazylora.py \
     --lr_scheduler_type constant \
     --gradient_checkpointing False \
     --dataset $dataset \
-    --source_max_len 512 \
-    --target_max_len 1024 \
+    --source_max_len 16 \
+    --target_max_len 512 \
     --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 32 \
-    --max_steps 2343 \
-    --eval_steps 234 \
-    --learning_rate 0.0001 \
+    --gradient_accumulation_steps 16 \
+    --max_steps 1875 \
+    --eval_steps 187 \
+    --learning_rate 0.0002 \
     --adam_beta2 0.999 \
     --max_grad_norm 0.3 \
     --lazy_lora_dropout 0.05 \

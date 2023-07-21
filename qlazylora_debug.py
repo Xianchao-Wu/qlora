@@ -179,10 +179,6 @@ class TrainingArguments(transformers.Seq2SeqTrainingArguments):
         default=True,
         metadata={"help": "On-the-fly dynamically determine the rank of a lazy LoRA layer by the singular value of the weight matrix."}
     )
-    rank_file: str = field(
-        default="",
-        metadata={"help": "reuse existing dynamic ranks for weights, json format in one line"}
-    )
     lazy_lora_alpha: float = field(
         default=16,
         metadata={"help": "Lazy Lora alpha."}
@@ -309,7 +305,7 @@ def get_accelerate_model(args, checkpoint_dir):
     n_gpus = torch.cuda.device_count()
     max_memory = f'{args.max_memory_MB}MB'
     max_memory = {i: max_memory for i in range(n_gpus)}
-    device_map = 'auto' #{"": 0} # "auto" TODO
+    device_map = {"": 0} # "auto" TODO
 
     # if we are in a distributed setting, we need to set the device map and max memory per device
     if os.environ.get('LOCAL_RANK') is not None:
@@ -327,8 +323,8 @@ def get_accelerate_model(args, checkpoint_dir):
         cache_dir=args.cache_dir,
         load_in_4bit=args.bits == 4,
         load_in_8bit=args.bits == 8,
-        device_map=device_map,
-        max_memory=max_memory,
+        device_map={"": 0}, #device_map,
+        #max_memory=max_memory,
         quantization_config=BitsAndBytesConfig(
             load_in_4bit=args.bits == 4,
             load_in_8bit=args.bits == 8,
@@ -349,8 +345,8 @@ def get_accelerate_model(args, checkpoint_dir):
             print('Your GPU supports bfloat16, you can accelerate training with the argument --bf16')
             print('='*80)
 
-    setattr(model, 'model_parallel', True) # TODO
-    setattr(model, 'is_parallelizable', True) # TODO
+    setattr(model, 'model_parallel', False) #True) # TODO
+    setattr(model, 'is_parallelizable', False) #True) # TODO
 
     model.config.torch_dtype=(torch.float32 if args.fp16 else (torch.bfloat16 if args.bf16 else torch.float32))
 
@@ -385,7 +381,6 @@ def get_accelerate_model(args, checkpoint_dir):
 
             config = LazyLoraConfig(
                 r=args.lora_r,
-                rank_file=args.rank_file,
                 is_r_by_svd=args.is_r_by_svd,
                 lazy_lora_alpha=args.lazy_lora_alpha,
                 lazy_pre_lora_alpha=args.lazy_pre_lora_alpha,

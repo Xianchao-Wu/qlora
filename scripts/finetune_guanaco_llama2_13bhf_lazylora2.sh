@@ -1,21 +1,15 @@
-is_r_by_svd=True
-num_tok_prompt=0
-num_tok_prefix=0
-pre_adapter="none"
-lora_r=32
-out_dir="./output/huarizo-33b-12-longform"
-
-dataset="longform"
+#--model_name_or_path meta-llama/Llama-2-13b-hf \
+mpath="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/1f3a61cf48cd578461427f32fa858097296a4236"
 
 python qlazylora.py \
-    --model_name_or_path huggyllama/llama-30b \
-    --output_dir ${out_dir} \
+    --model_name_or_path $mpath \
+    --output_dir ./output/huarizo-llama2-13b-2-hf \
 	--cache_dir "/workspace/asr/peft/qlora" \
     --logging_steps 10 \
     --save_strategy steps \
     --data_seed 42 \
     --save_steps 100 \
-    --save_total_limit 60 \
+    --save_total_limit 40 \
     --evaluation_strategy steps \
     --eval_dataset_size 1024 \
     --max_eval_samples 1000 \
@@ -28,13 +22,13 @@ python qlazylora.py \
     --do_train \
     --do_eval \
     --do_mmlu_eval \
-	--num_virtual_tokens_prompt ${num_tok_prompt} \
-	--num_virtual_tokens_prefix ${num_tok_prefix} \
-    --lora_r ${lora_r} \
-	--is_r_by_svd ${is_r_by_svd} \
+	--num_virtual_tokens_prompt 0 \
+	--num_virtual_tokens_prefix 0 \
+    --lora_r 64 \
+	--is_r_by_svd True \
     --lazy_lora_alpha 16 \
 	--lazy_pre_lora_alpha 0.1 \
-	--lazy_pre_adapter_type ${pre_adapter} \
+	--lazy_pre_adapter_type "none" \
     --lora_modules "all" \
     --double_quant \
     --quant_type nf4 \
@@ -43,14 +37,14 @@ python qlazylora.py \
     --warmup_ratio 0.03 \
     --lr_scheduler_type constant \
     --gradient_checkpointing False \
-    --dataset $dataset \
-    --source_max_len 512 \
-    --target_max_len 1024 \
+    --dataset oasst1 \
+    --source_max_len 16 \
+    --target_max_len 512 \
     --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 32 \
-    --max_steps 2343 \
-    --eval_steps 234 \
-    --learning_rate 0.0001 \
+    --gradient_accumulation_steps 16 \
+    --max_steps 1875 \
+    --eval_steps 187 \
+    --learning_rate 0.0002 \
     --adam_beta2 0.999 \
     --max_grad_norm 0.3 \
     --lazy_lora_dropout 0.05 \
@@ -59,3 +53,8 @@ python qlazylora.py \
     
 #--lora_modules all \
 #--lora_modules 'q_proj' \
+
+# is_r_by_svd: True/False TODO
+# num_virtual_tokens_prompt: 0 or not 0 -> prompt tuning TODO
+# num_virtual_tokens_prefix: 0 or not 0 -> prefix tuning TODO
+# lazy_pre_adapter_type: 'none', 'linear', or 'conv1d' TODO
