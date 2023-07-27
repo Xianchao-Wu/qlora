@@ -3,7 +3,7 @@ mpath="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-7b-hf/snapshots/4e4
 
 python qlazylora.py \
     --model_name_or_path $mpath \
-    --output_dir ./output/huarizo-llama2-7b-2-hf \
+    --output_dir ./output/huarizo-llama2-7b-2-hf-2 \
 	--cache_dir "/workspace/asr/peft/qlora" \
     --logging_steps 10 \
     --save_strategy steps \
@@ -26,6 +26,7 @@ python qlazylora.py \
 	--num_virtual_tokens_prefix 0 \
     --lora_r 64 \
 	--is_r_by_svd True \
+	--rank_file /workspace/asr/peft/qlora/run2_llama2_7bhf_lazylora2.sh.log.lazyrank.json \
     --lazy_lora_alpha 16 \
 	--lazy_pre_lora_alpha 0.1 \
 	--lazy_pre_adapter_type "none" \
@@ -42,7 +43,7 @@ python qlazylora.py \
     --target_max_len 512 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 16 \
-    --max_steps 1875 \
+    --max_steps 7500 \
     --eval_steps 187 \
     --learning_rate 0.0002 \
     --adam_beta2 0.999 \

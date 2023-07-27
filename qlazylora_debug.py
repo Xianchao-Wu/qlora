@@ -41,7 +41,6 @@ from transformers import (
     Seq2SeqTrainer,
     BitsAndBytesConfig,
     LlamaTokenizer
-
 )
 from datasets import load_dataset, Dataset
 import evaluate
@@ -74,7 +73,7 @@ class ModelArguments:
         metadata={"help": "Enable unpickling of arbitrary code in AutoModelForCausalLM#from_pretrained."}
     )
     use_auth_token: Optional[bool] = field(
-        default=False,
+        default=True,
         metadata={"help": "Enables using Huggingface auth token from Git Credentials."}
     )
 
@@ -125,7 +124,7 @@ class TrainingArguments(transformers.Seq2SeqTrainingArguments):
     )
     mmlu_split: Optional[str] = field(
         default='eval',
-        metadata={"help": "The MMLU split to run on"}
+        metadata={"help": "The MMLU split to run on: 'eval' or 'test'"}
     )
     mmlu_dataset: Optional[str] = field(
         default='mmlu-fs',
@@ -208,6 +207,7 @@ class TrainingArguments(transformers.Seq2SeqTrainingArguments):
         metadata={"help": "To use wandb or something else for reporting."}
     )
     output_dir: str = field(default='./output', metadata={"help": 'The output dir for logs and checkpoints'})
+    checkpoint_dir: str = field(default=None, metadata={"help": 'The checkpoint dir for adapter_model that contains adapter_model.bin and adapter_config.json'})
     optim: str = field(default='paged_adamw_32bit', metadata={"help": 'The optimizer to be used'})
     per_device_train_batch_size: int = field(default=1, metadata={"help": 'The training batch size per GPU. Increase for better speed.'})
     gradient_accumulation_steps: int = field(default=16, metadata={"help": 'How many gradients to accumulate before to perform an optimizer step'})
@@ -305,7 +305,7 @@ def get_accelerate_model(args, checkpoint_dir):
     n_gpus = torch.cuda.device_count()
     max_memory = f'{args.max_memory_MB}MB'
     max_memory = {i: max_memory for i in range(n_gpus)}
-    device_map = {"": 0} # "auto" TODO
+    device_map = "auto" #{"": 0} # "auto" TODO
 
     # if we are in a distributed setting, we need to set the device map and max memory per device
     if os.environ.get('LOCAL_RANK') is not None:
@@ -314,7 +314,7 @@ def get_accelerate_model(args, checkpoint_dir):
         max_memory = {'': max_memory[local_rank]}
 
 
-    if args.full_finetune: assert args.bits in [16, 32]
+    if args.full_finetune: assert args.bits in [4, 16, 32] # NOTE TODO
 
     print(f'loading base model {args.model_name_or_path}...')
     compute_dtype = (torch.float16 if args.fp16 else (torch.bfloat16 if args.bf16 else torch.float32))
@@ -323,8 +323,8 @@ def get_accelerate_model(args, checkpoint_dir):
         cache_dir=args.cache_dir,
         load_in_4bit=args.bits == 4,
         load_in_8bit=args.bits == 8,
-        device_map={"": 0}, #device_map,
-        #max_memory=max_memory,
+        device_map=device_map,
+        max_memory=max_memory,
         quantization_config=BitsAndBytesConfig(
             load_in_4bit=args.bits == 4,
             load_in_8bit=args.bits == 8,
@@ -345,8 +345,8 @@ def get_accelerate_model(args, checkpoint_dir):
             print('Your GPU supports bfloat16, you can accelerate training with the argument --bf16')
             print('='*80)
 
-    setattr(model, 'model_parallel', False) #True) # TODO
-    setattr(model, 'is_parallelizable', False) #True) # TODO
+    setattr(model, 'model_parallel', True) # TODO
+    setattr(model, 'is_parallelizable', True) # TODO
 
     model.config.torch_dtype=(torch.float32 if args.fp16 else (torch.bfloat16 if args.bf16 else torch.float32))
 
@@ -354,6 +354,10 @@ def get_accelerate_model(args, checkpoint_dir):
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=args.gradient_checkpointing)
     if args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
+    
+    if checkpoint_dir is not None and args.do_mmlu_eval:
+        print("Loading adapters from checkpoint={}".format(checkpoint_dir))
+        model = PeftModel.from_pretrained(model, join(checkpoint_dir, 'adapter_model'), is_trainable=False)
 
     if not args.full_finetune:
         if checkpoint_dir is not None:
@@ -697,14 +701,17 @@ def train():
     ))
     model_args, data_args, training_args, generation_args, extra_args = \
         hfparser.parse_args_into_dataclasses(return_remaining_strings=True)
-    training_args.generation_config = transformers.GenerationConfig(**vars(generation_args))
+    training_args.generation_config = transformers.GenerationConfig(**vars(generation_args)) # 直接抽取data class里面的属性和值
     args = argparse.Namespace(
         **vars(model_args), **vars(data_args), **vars(training_args)
     )
-
-    checkpoint_dir, completed_training = get_last_checkpoint(args.output_dir)
-    if completed_training:
-        print('Detected that training was already completed!')
+    
+    if args.checkpoint_dir is not None and len(args.checkpoint_dir) > 0:
+        checkpoint_dir = args.checkpoint_dir
+    else:
+        checkpoint_dir, completed_training = get_last_checkpoint(args.output_dir)
+        if completed_training:
+            print('Detected that training was already completed!')
 
     model = get_accelerate_model(args, checkpoint_dir)
 
@@ -766,7 +773,7 @@ def train():
                 'test': 'data/mmlu/five_shot_mmlu_test.json',
             })
             # mmlu_dataset = mmlu_dataset.remove_columns('subject')
-        mmlu_dataset = mmlu_dataset[args.mmlu_split] # 'eval' in {'eval', 'test'}
+        mmlu_dataset = mmlu_dataset[args.mmlu_split] # 'eval' in {'eval', 'test'} # TODO TODO important!
         if args.max_mmlu_samples is not None:
             mmlu_dataset = mmlu_dataset.select(range(args.max_mmlu_samples))
         abcd_idx = [
@@ -812,6 +819,7 @@ def train():
                     subject_scores.append(subject_score)
                 results[f'mmlu_{args.mmlu_split}_accuracy'] = np.mean(subject_scores)
                 trainer.log(results)
+                print(results)
                 trainer.data_collator.source_max_len = source_max_len
 
         trainer.add_callback(MMLUEvalCallback) # NOTE
@@ -840,9 +848,9 @@ def train():
         trainer.save_state()
         all_metrics.update(metrics)
     # Evaluation
-    if args.do_eval:
+    if args.do_eval: # in NOTE
         logger.info("*** Evaluate ***")
-        metrics = trainer.evaluate(metric_key_prefix="eval")
+        metrics = trainer.evaluate(metric_key_prefix="eval") # NOTE
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
         all_metrics.update(metrics)

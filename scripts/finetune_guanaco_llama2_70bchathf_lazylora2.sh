@@ -1,4 +1,5 @@
-mpath="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/bdd2793015239e5493e591a16fc13d501a8a8468"
+#mpath="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/bdd2793015239e5493e591a16fc13d501a8a8468"
+mpath="meta-llama/Llama-2-70b-chat-hf"
 python qlazylora.py \
     --model_name_or_path $mpath \
     --output_dir ./output/huarizo-llama2-70b-2-chat-hf \

@@ -6,4 +6,4 @@
 #########################################################################
 #!/bin/bash
 
-bash scripts/finetune_guanaco_13b_lazylora12_debug.sh
+bash scripts/finetune_guanaco_70bhf_lazylora12_debug_ckpt2.sh
