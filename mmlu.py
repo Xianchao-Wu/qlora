@@ -23,7 +23,7 @@ with open(logfn) as br:
             model = aline
         if 'mmlu_eval_accuracy' in aline or 'mmlu_test_accuracy' in aline:
             aline = aline.replace('\'', '\"')
-            #print(aline)
+            print(aline)
             mmlu_acc = acc(aline)
             #print(mmlu_acc)
             flag = 'mmlu_eval_accuracy' if 'mmlu_eval_accuracy' in aline else 'mmlu_test_accuracy'
@@ -34,4 +34,6 @@ with open(logfn) as br:
             ckpt = aline
 
 for three in res:
-    print(three)
+    athree = str(three)
+    athree = athree[2:-1].replace('\'', '').replace(',', ' ')
+    print(athree)
