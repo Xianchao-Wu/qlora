@@ -9,7 +9,14 @@ logfn=sys.argv[1]
 
 def acc(aline):
     cols = aline.split(' ')
-    return cols[-1][:-1]
+    res = cols[-2]
+    if 'epoch' in res:
+        res = cols[-3]
+    else:
+        res = cols[-1]
+
+    res = res[:-1]
+    return res #cols[-1][:-1]
 
 res = list()
 

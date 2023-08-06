@@ -33,12 +33,13 @@ dataset="oasst1"
 # ---- TODO 70b ----
 
 mpath1="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/b70e3df5fc2bf95ba5859878cafa2da37908598c" # 0.6766455649018766
-mpath2="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/bc7d6a85f909e2af7678537df0c771ae7b0e8010" # 0.6766455649018766
+#mpath2="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/bc7d6a85f909e2af7678537df0c771ae7b0e8010" # 0.6766455649018766
 
 #mpath3="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/bdd2793015239e5493e591a16fc13d501a8a8468" # 0.6233116203658348
 #mpath4="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/c733a855493ee517f3c51c490ea6ce6ce52cd837" # 0.6239336299352127
 
-for mpath in $mpath1 $mpath2 
+#for mpath in $mpath1 $mpath2 
+for mpath in $mpath1
 do
 	echo "----"
 	echo $mpath
@@ -47,7 +48,7 @@ do
 	#--model_name_or_path huggyllama/llama-13b \
 	echo "mpath=$mpath"
 
-	out_dir="/workspace/asr/peft/qlora/output/huarizo-llama2-70b-2-hf"
+	out_dir="/workspace/asr/peft/qlora/output/huarizo-llama2-70b-2-hf-2"
 	#out_dir2="/workspace/asr/peft/qlora/output/huarizo-llama2-13b-2-hf-2"
 
 	for checkpoint_dir in `ls -d ${out_dir}/checkpoint-*`

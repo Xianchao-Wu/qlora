@@ -22,23 +22,41 @@ dataset="oasst1"
 
 
 # ---- TODO 13b ----
-mpath5="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/1f3a61cf48cd578461427f32fa858097296a4236" # 0.5658459957850754
-mpath6="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/31820c723bc0368c339e067553021dc6a8bf4375" # 0.5656705571885842
-mpath7="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/f3b475aaed299d2389525d6ce4e542cc438833a4" # 0.5656705571885843
+#mpath5="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/1f3a61cf48cd578461427f32fa858097296a4236" # 0.5658459957850754
+#mpath6="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/31820c723bc0368c339e067553021dc6a8bf4375" # 0.5656705571885842
+#mpath7="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/f3b475aaed299d2389525d6ce4e542cc438833a4" # 0.5656705571885843
+
+#0.5570256336151178  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/1f3a61cf48cd578461427f32fa858097296a4236
+#0.5570926217403468  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/31820c723bc0368c339e067553021dc6a8bf4375
+#0.5570926217403468  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-hf/snapshots/f3b475aaed299d2389525d6ce4e542cc438833a4
 
 mpath8="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-chat-hf/snapshots/4021a3b5608262f386b2bee683b6348e9228325d" # 0.5474056332816782
 mpath9="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-chat-hf/snapshots/7389082e6bc4fcbf6202e6108a70194800e6c51e" # 0.5458454086093255
 mpath10="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-chat-hf/snapshots/a4ccda4a5be5ea5869b992103384ae5458b26bc3" # 0.5458454086093255 
 
-# ---- TODO 70b ----
-mpath11="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/b70e3df5fc2bf95ba5859878cafa2da37908598c" # 0.6766455649018766
-mpath12="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/bc7d6a85f909e2af7678537df0c771ae7b0e8010" # 0.6766455649018766
+# 0.5462462702771187  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-chat-hf/snapshots/4021a3b5608262f386b2bee683b6348e9228325d
+# 0.546715039439677  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-chat-hf/snapshots/7389082e6bc4fcbf6202e6108a70194800e6c51e
+# 0.546715039439677  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-13b-chat-hf/snapshots/a4ccda4a5be5ea5869b992103384ae5458b26bc3
 
-mpath13="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/bdd2793015239e5493e591a16fc13d501a8a8468" # 0.6233116203658348
-mpath14="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/c733a855493ee517f3c51c490ea6ce6ce52cd837" # 0.6239336299352127
+# ---- TODO 70b ----
+#mpath11="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/b70e3df5fc2bf95ba5859878cafa2da37908598c" # 0.6766455649018766
+#mpath12="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/bc7d6a85f909e2af7678537df0c771ae7b0e8010" # 0.6766455649018766
+
+# 0.6984984100755401  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/b70e3df5fc2bf95ba5859878cafa2da37908598c
+# 0.6983831423943235  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-hf/snapshots/bc7d6a85f909e2af7678537df0c771ae7b0e8010
+
+
+#mpath13="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/bdd2793015239e5493e591a16fc13d501a8a8468" # 0.6233116203658348
+#mpath14="/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/c733a855493ee517f3c51c490ea6ce6ce52cd837" # 0.6239336299352127
+# 0.6385419375681878  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/bdd2793015239e5493e591a16fc13d501a8a8468
+# 0.6384623934619676  mmlu_test_accuracy  mpath=/workspace/asr/peft/qlora/models--meta-llama--Llama-2-70b-chat-hf/snapshots/c733a855493ee517f3c51c490ea6ce6ce52cd837
 
 #for mpath in $mpath1 $mpath2 $mpath3 $mpath4 $mpath5 $mpath6 $mpath7 $mpath8 $mpath9 $mpath10 $mpath11 $mpath12 $mpath13 $mpath14 
-for mpath in $mpath5 $mpath6 $mpath7 $mpath8 $mpath9 $mpath10 $mpath11 $mpath12 $mpath13 $mpath14 
+#for mpath in $mpath5 $mpath6 $mpath7 $mpath8 $mpath9 $mpath10 $mpath11 $mpath12 $mpath13 $mpath14 
+
+#for mpath in $mpath13 $mpath14 
+#for mpath in $mpath5 $mpath6 $mpath7 $mpath8 $mpath9 $mpath10
+for mpath in $mpath8 $mpath9 $mpath10
 do
 	echo "----"
 	echo $mpath
@@ -47,7 +65,7 @@ do
 	#--model_name_or_path huggyllama/llama-13b \
 	echo "mpath=$mpath"
 
-	python qlazylora_debug.py \
+	python qlazylora_debug2.py \
 		--model_name_or_path $mpath \
 		--output_dir ${out_dir} \
 		--cache_dir "/workspace/asr/peft/qlora" \
